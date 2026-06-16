@@ -1,0 +1,233 @@
+{
+  "name": "YouTube Clone & Re-upload with AI",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "c9f1a2b3-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+      "name": "Schedule Trigger (Every 6 hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.youtube.com/feeds/videos.xml?channel_id=YOUR_CHANNEL_ID",
+        "responseFormat": "json"
+      },
+      "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      "name": "Get RSS Feed (New Videos)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.entry?.[0]?.['yt:videoId'] }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
+      "name": "Check if New Video",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet,contentDetails"
+            },
+            {
+              "name": "id",
+              "value": "={{ $json.entry[0]['yt:videoId'] }}"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_YOUTUBE_API_KEY"
+            }
+          ]
+        }
+      },
+      "id": "c3d4e5f6-a789-0123-4567-890abcdef12",
+      "name": "Get Video Details (YouTube API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "text": "You are a YouTube content strategist. You have a video with the title: '{{ $json.items[0].snippet.title }}' and description: '{{ $json.items[0].snippet.description }}'. Extract 3 key moments (each 30-60 seconds) from this video that would make great YouTube Shorts. Return the start times in seconds as a JSON array. Example: [45, 120, 205]"
+      },
+      "id": "d4e5f6a7-8901-2345-6789-abcdef12345",
+      "name": "AI Extract Key Moments",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "credentials": {
+        "openAiApi": "YOUR_OPENAI_CREDENTIALS"
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.fal.ai/v1/fal-ai/youtube-shorts-generator",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Key YOUR_FAL_AI_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "video_url",
+              "value": "=https://www.youtube.com/watch?v={{ $('Get Video Details (YouTube API)').item.json.items[0].id }}"
+            },
+            {
+              "name": "timestamps",
+              "value": "={{ $json.choices[0].message.content }}"
+            }
+          ]
+        }
+      },
+      "id": "e5f6a7b8-9012-3456-7890-abcdef123456",
+      "name": "Generate Clips via Fal.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "text": "You are an expert YouTube title and description writer. Based on the original video title: '{{ $('Get Video Details (YouTube API)').item.json.items[0].snippet.title }}' and this clip's content, generate a catchy title (max 60 chars) and a description (max 200 words) with hashtags. Return as JSON: {\"title\": \"...\", \"description\": \"...\"}"
+      },
+      "id": "f6a7b8c9-0123-4567-890a-bcdef1234567",
+      "name": "AI Generate Title & Description",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "credentials": {
+        "openAiApi": "YOUR_OPENAI_CREDENTIALS"
+      }
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ JSON.parse($json.choices[0].message.content).title }}",
+        "description": "={{ JSON.parse($json.choices[0].message.content).description }}",
+        "videoUrl": "={{ $('Generate Clips via Fal.ai').item.json.video_url }}",
+        "visibility": "public"
+      },
+      "id": "a7b8c9d0-1234-5678-90ab-cdef12345678",
+      "name": "Upload to YouTube (Second Channel)",
+      "type": "n8n-nodes-base.youtube",
+      "typeVersion": 1,
+      "position": [1650, 300],
+      "credentials": {
+        "youtubeOAuth2": "YOUR_YOUTUBE_OAUTH2"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Every 6 hours)": {
+      "main": [
+        [
+          {
+            "node": "Get RSS Feed (New Videos)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get RSS Feed (New Videos)": {
+      "main": [
+        [
+          {
+            "node": "Check if New Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if New Video": {
+      "main": [
+        [
+          {
+            "node": "Get Video Details (YouTube API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Video Details (YouTube API)": {
+      "main": [
+        [
+          {
+            "node": "AI Extract Key Moments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Extract Key Moments": {
+      "main": [
+        [
+          {
+            "node": "Generate Clips via Fal.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Clips via Fal.ai": {
+      "main": [
+        [
+          {
+            "node": "AI Generate Title & Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Generate Title & Description": {
+      "main": [
+        [
+          {
+            "node": "Upload to YouTube (Second Channel)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
